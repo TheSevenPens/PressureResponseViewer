@@ -356,11 +356,42 @@
             const visibleDatasets = datasets.filter(ds => visibility[ds.label]);
             // Sort datasets to render highlighted pens last (on top)
             visibleDatasets.sort((a, b) => (highlight[b.label] || false) - (highlight[a.label] || false));
+
+            // Determine unique color groups for the legend
+            const mode = colorModeSelect.value;
+            const highlightStates = Object.values(highlight);
+            const allHighlighted = highlightStates.length > 0 && highlightStates.every(state => state);
+            const noneHighlighted = highlightStates.length > 0 && highlightStates.every(state => !state);
+            const uniqueValues = [...new Set(datasets.map(ds => ds[mode]))];
+            const legendItems = [];
+
+            if (!allHighlighted && !noneHighlighted) {
+                // Include gray color for non-highlighted pens
+                legendItems.push({
+                    text: 'Non-Highlighted',
+                    fillStyle: '#B0B0B0',
+                    strokeStyle: '#B0B0B0',
+                    hidden: !visibleDatasets.some(ds => !highlight[ds.label])
+                });
+            }
+
+            uniqueValues.forEach(value => {
+                const color = colorAssignments[mode][value] || colors[0];
+                const isHidden = !visibleDatasets.some(ds => ds[mode] === value);
+                legendItems.push({
+                    text: value,
+                    fillStyle: color,
+                    strokeStyle: color,
+                    hidden: isHidden
+                });
+            });
+
             chart = new Chart(ctx, {
                 type: 'line',
                 data: { datasets: visibleDatasets },
                 options: {
                     responsive: true,
+                    animation: false, // Disable animations
                     scales: {
                         x: {
                             type: 'linear',
@@ -374,7 +405,43 @@
                         }
                     },
                     plugins: {
-                        legend: { display: true },
+                        legend: {
+                            display: true,
+                            labels: {
+                                generateLabels: function(chart) {
+                                    return legendItems.map(item => ({
+                                        text: item.text,
+                                        fillStyle: item.fillStyle,
+                                        strokeStyle: item.strokeStyle,
+                                        hidden: item.hidden,
+                                        datasetIndex: item.text === 'Non-Highlighted' ? -1 : datasets.findIndex(ds => ds[mode] === item.text)
+                                    }));
+                                }
+                            },
+                            onClick: function(e, legendItem, legend) {
+                                const index = legendItem.datasetIndex;
+                                const chart = legend.chart;
+
+                                if (index === -1) {
+                                    // Toggle visibility of all non-highlighted datasets
+                                    datasets.forEach(ds => {
+                                        if (!highlight[ds.label]) {
+                                            visibility[ds.label] = !visibility[ds.label];
+                                        }
+                                    });
+                                } else {
+                                    // Toggle visibility of all datasets with the same mode value
+                                    const value = legendItem.text;
+                                    datasets.forEach(ds => {
+                                        if (ds[mode] === value) {
+                                            visibility[ds.label] = !visibility[ds.label];
+                                        }
+                                    });
+                                }
+
+                                chart.update();
+                            }
+                        },
                         title: { display: true, text: 'Pen Pressure Mapping' },
                         annotation: {
                             annotations: {
