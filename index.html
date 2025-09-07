@@ -1,0 +1,597 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pen Pressure Graph Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        #drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #fff;
+        }
+        #drop-zone.dragover {
+            border-color: #000;
+            background-color: #e0e0e0;
+        }
+        #chart-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #pen-table {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background-color: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #pen-table th, #pen-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        #pen-table th {
+            background-color: #f2f2f2;
+        }
+        .color-box {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        #controls-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 10px auto;
+            text-align: center;
+        }
+        #controls-container select, #controls-container button {
+            padding: 5px;
+            font-size: 16px;
+            margin: 0 10px;
+        }
+        #controls-container button {
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #controls-container button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="drop-zone">Drag and drop JSON files here to graph pen pressure data.</div>
+    <div id="controls-container">
+        <label for="color-mode">Color by: </label>
+        <select id="color-mode" onchange="updateChartAndTable()">
+            <option value="inventoryid">Inventory ID</option>
+            <option value="pen">Pen Model</option>
+            <option value="brand">Brand</option>
+        </select>
+        <label for="x-axis-max">X-Axis Max: </label>
+        <select id="x-axis-max" onchange="updateChart()">
+            <option value="auto">Automatic</option>
+            <option value="250">250</option>
+            <option value="500">500</option>
+            <option value="1000" selected>1000</option>
+        </select>
+        <button id="copy-chart">Copy to Clipboard</button>
+        <button id="download-chart">Download as PNG</button>
+    </div>
+    <div id="chart-container">
+        <canvas id="pressureChart"></canvas>
+    </div>
+    <table id="pen-table">
+        <thead>
+            <tr>
+                <th>Visible</th>
+                <th>Highlight</th>
+                <th>Color</th>
+                <th>Pen Model</th>
+                <th>Inventory Number</th>
+                <th>Lowest Physical Pressure</th>
+                <th>Highest Physical Pressure</th>
+                <th>P25</th>
+                <th>P50</th>
+                <th>P75</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody id="pen-table-body"></tbody>
+    </table>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const canvas = document.getElementById('pressureChart');
+        const ctx = canvas.getContext('2d');
+        const tableBody = document.getElementById('pen-table-body');
+        const colorModeSelect = document.getElementById('color-mode');
+        const xAxisMaxSelect = document.getElementById('x-axis-max');
+        const copyChartButton = document.getElementById('copy-chart');
+        const downloadChartButton = document.getElementById('download-chart');
+        let chart = null;
+        const datasets = [];
+        const tableData = [];
+        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#7BCF7B', '#FF5555', '#55AAFF'];
+        const colorAssignments = {
+            inventoryid: {},
+            pen: {},
+            brand: {}
+        };
+        const visibility = {};
+        const highlight = {};
+
+        // Function to calculate physical pressure for a given logical pressure using linear interpolation
+        function calculatePhysicalPressure(records, targetLogicalPressure) {
+            // Sort records by logical pressure (y) to ensure correct order
+            const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
+            let lower = null;
+            let upper = null;
+
+            // Find the two points that straddle the target logical pressure
+            for (let i = 0; i < sortedRecords.length - 1; i++) {
+                if (sortedRecords[i][1] <= targetLogicalPressure && sortedRecords[i + 1][1] >= targetLogicalPressure) {
+                    lower = sortedRecords[i];
+                    upper = sortedRecords[i + 1];
+                    break;
+                }
+            }
+
+            if (!lower || !upper) {
+                return 'N/A'; // Return N/A if no points straddle the target
+            }
+
+            // Linear interpolation: x = x1 + (x2 - x1) * (y - y1) / (y2 - y1)
+            const x1 = lower[0], y1 = lower[1];
+            const x2 = upper[0], y2 = upper[1];
+            const x = x1 + (x2 - x1) * (targetLogicalPressure - y1) / (y2 - y1);
+            return x.toFixed(1);
+        }
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop zone
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        // Handle drop
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const files = e.dataTransfer.files;
+            Array.from(files).forEach(file => {
+                if (file.type === 'application/json') {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        try {
+                            const json = JSON.parse(event.target.result);
+                            const label = json.inventoryid || file.name;
+                            const data = json.records.map(record => ({ x: record[0], y: record[1] }));
+                            datasets.push({
+                                label: label,
+                                data: data,
+                                inventoryid: json.inventoryid || 'Unknown',
+                                pen: json.pen || 'Unknown',
+                                brand: json.brand || 'Unknown'
+                            });
+                            const physicalPressures = json.records.map(record => record[0]);
+                            tableData.push({
+                                penModel: json.pen || 'Unknown',
+                                inventoryNumber: json.inventoryid || 'Unknown',
+                                lowestPressure: Math.min(...physicalPressures).toFixed(1),
+                                highestPressure: Math.max(...physicalPressures).toFixed(1),
+                                p25: calculatePhysicalPressure(json.records, 25),
+                                p50: calculatePhysicalPressure(json.records, 50),
+                                p75: calculatePhysicalPressure(json.records, 75),
+                                date: json.date || 'Unknown',
+                                brand: json.brand || 'Unknown'
+                            });
+                            visibility[json.inventoryid || file.name] = true; // Initialize visibility to true
+                            highlight[json.inventoryid || file.name] = true; // Initialize highlight to true
+                            assignColors();
+                            updateChartAndTable();
+                        } catch (err) {
+                            alert(`Error parsing ${file.name}: ${err.message}`);
+                        }
+                    };
+                    reader.readAsText(file);
+                } else {
+                    alert(`File ${file.name} is not a JSON file.`);
+                }
+            });
+        }
+
+        // Copy chart to clipboard
+        copyChartButton.addEventListener('click', () => {
+            if (!chart) {
+                alert('No chart available to copy.');
+                return;
+            }
+            canvas.toBlob(blob => {
+                const item = new ClipboardItem({ 'image/png': blob });
+                navigator.clipboard.write([item]).then(() => {
+                    alert('Chart copied to clipboard!');
+                }).catch(err => {
+                    alert(`Failed to copy chart: ${err.message}`);
+                });
+            });
+        });
+
+        // Download chart as PNG
+        downloadChartButton.addEventListener('click', () => {
+            if (!chart) {
+                alert('No chart available to download.');
+                return;
+            }
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = 'pen_pressure_chart.png';
+            link.click();
+        });
+
+        function assignColors() {
+            const mode = colorModeSelect.value;
+            const uniqueValues = [...new Set(datasets.map(ds => ds[mode]))];
+            uniqueValues.forEach((value, index) => {
+                colorAssignments[mode][value] = colors[index % colors.length];
+            });
+
+            // Check if all or none are highlighted
+            const highlightStates = Object.values(highlight);
+            const allHighlighted = highlightStates.length > 0 && highlightStates.every(state => state);
+            const noneHighlighted = highlightStates.length > 0 && highlightStates.every(state => !state);
+
+            datasets.forEach(ds => {
+                if (allHighlighted || noneHighlighted) {
+                    // Normal color assignment based on mode
+                    const color = colorAssignments[mode][ds[mode]] || colors[0];
+                    ds.borderColor = color;
+                    ds.backgroundColor = color + '80';
+                } else {
+                    // Apply highlight logic: highlighted pens keep their color, others get light gray
+                    const isHighlighted = highlight[ds.label];
+                    if (isHighlighted) {
+                        const color = colorAssignments[mode][ds[mode]] || colors[0];
+                        ds.borderColor = color;
+                        ds.backgroundColor = color + '80';
+                    } else {
+                        ds.borderColor = '#B0B0B0'; // Lighter gray
+                        ds.backgroundColor = '#B0B0B080';
+                    }
+                }
+                ds.fill = false;
+                ds.tension = 0.1;
+            });
+
+            tableData.forEach(row => {
+                const dataset = datasets.find(ds => ds.inventoryid === row.inventoryNumber);
+                if (dataset) {
+                    row.color = dataset.borderColor;
+                }
+            });
+        }
+
+        function updateChart() {
+            if (chart) {
+                chart.destroy();
+            }
+            const xAxisMax = xAxisMaxSelect.value;
+            const xScaleOptions = xAxisMax === 'auto' ? {} : {
+                max: parseInt(xAxisMax),
+                beginAtZero: true
+            };
+            const visibleDatasets = datasets.filter(ds => visibility[ds.label]);
+            // Sort datasets to render highlighted pens last (on top)
+            visibleDatasets.sort((a, b) => (highlight[b.label] || false) - (highlight[a.label] || false));
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: visibleDatasets },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: { display: true, text: 'Physical Pressure' },
+                            ...xScaleOptions
+                        },
+                        y: {
+                            type: 'linear',
+                            title: { display: true, text: 'Logical Pressure' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: true },
+                        title: { display: true, text: 'Pen Pressure Mapping' },
+                        annotation: {
+                            annotations: {
+                                box1: {
+                                    type: 'box',
+                                    xMin: 200,
+                                    xMax: 350,
+                                    yMin: 0,
+                                    yMax: 'max',
+                                    backgroundColor: 'rgba(200, 200, 200, 0.2)',
+                                    borderWidth: 0
+                                },
+                                box2: {
+                                    type: 'box',
+                                    xMin: 500,
+                                    xMax: 900,
+                                    yMin: 0,
+                                    yMax: 'max',
+                                    backgroundColor: 'rgba(200, 200, 200, 0.2)',
+                                    borderWidth: 0
+                                },
+                                line1: {
+                                    type: 'line',
+                                    xMin: 200,
+                                    xMax: 200,
+                                    yMin: 0,
+                                    yMax: 'max',
+                                    borderColor: '#000000',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        content: 'OK',
+                                        enabled: true,
+                                        position: 'bottom',
+                                        backgroundColor: 'rgba(0,0,0,0.8)',
+                                        color: '#ffffff',
+                                        padding: 4
+                                    }
+                                },
+                                line2: {
+                                    type: 'line',
+                                    xMin: 350,
+                                    xMax: 350,
+                                    yMin: 0,
+                                    yMax: 'max',
+                                    borderColor: '#000000',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        content: 'GOOD',
+                                        enabled: true,
+                                        position: 'bottom',
+                                        backgroundColor: 'rgba(0,0,0,0.8)',
+                                        color: '#ffffff',
+                                        padding: 4
+                                    }
+                                },
+                                line3: {
+                                    type: 'line',
+                                    xMin: 500,
+                                    xMax: 500,
+                                    yMin: 0,
+                                    yMax: 'max',
+                                    borderColor: '#000000',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        content: 'EXCELLENT',
+                                        enabled: true,
+                                        position: 'bottom',
+                                        backgroundColor: 'rgba(0,0,0,0.8)',
+                                        color: '#ffffff',
+                                        padding: 4
+                                    }
+                                },
+                                line4: {
+                                    type: 'line',
+                                    xMin: 900,
+                                    xMax: 900,
+                                    yMin: 0,
+                                    yMax: 'max',
+                                    borderColor: '#000000',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        content: 'EXCESSIVE',
+                                        enabled: true,
+                                        position: 'bottom',
+                                        backgroundColor: 'rgba(0,0,0,0.8)',
+                                        color: '#ffffff',
+                                        padding: 4
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [ChartAnnotation]
+            });
+        }
+
+        function updateTable() {
+            tableBody.innerHTML = '';
+            tableData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="visibility-checkbox" data-inventory="${row.inventoryNumber}" ${visibility[row.inventoryNumber] ? 'checked' : ''}></td>
+                    <td><input type="checkbox" class="highlight-checkbox" data-inventory="${row.inventoryNumber}" ${highlight[row.inventoryNumber] ? 'checked' : ''}></td>
+                    <td><span class="color-box" style="background-color: ${row.color};"></span></td>
+                    <td>${row.penModel}</td>
+                    <td>${row.inventoryNumber}</td>
+                    <td>${row.lowestPressure}</td>
+                    <td>${row.highestPressure}</td>
+                    <td>${row.p25}</td>
+                    <td>${row.p50}</td>
+                    <td>${row.p75}</td>
+                    <td>${row.date}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            // Add event listeners to visibility checkboxes
+            document.querySelectorAll('.visibility-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const inventoryId = e.target.getAttribute('data-inventory');
+                    visibility[inventoryId] = e.target.checked;
+                    updateChart();
+                });
+            });
+
+            // Add event listeners to highlight checkboxes
+            document.querySelectorAll('.highlight-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const inventoryId = e.target.getAttribute('data-inventory');
+                    highlight[inventoryId] = e.target.checked;
+                    assignColors();
+                    updateChart();
+                    updateTable();
+                });
+            });
+        }
+
+        function updateChartAndTable() {
+            assignColors();
+            updateChart();
+            updateTable();
+        }
+
+        // Register Chart.js annotation plugin
+        const ChartAnnotation = {
+            id: 'annotation',
+            beforeDraw: function(chart) {
+                if (chart.config.options.plugins.annotation && chart.config.options.plugins.annotation.annotations) {
+                    const ctx = chart.ctx;
+                    Object.values(chart.config.options.plugins.annotation.annotations).forEach(annotation => {
+                        const xScale = chart.scales.x;
+                        const yScale = chart.scales.y;
+
+                        if (annotation.type === 'box') {
+                            const { xMin, xMax, yMin, yMax, backgroundColor, borderWidth } = annotation;
+                            const x1 = xScale.getPixelForValue(xMin);
+                            const x2 = xScale.getPixelForValue(xMax);
+                            const y1 = yScale.getPixelForValue(yMin === 'max' ? yScale.max : yMin);
+                            const y2 = yScale.getPixelForValue(yMax === 'max' ? yScale.max : yMax);
+
+                            ctx.save();
+                            ctx.fillStyle = backgroundColor;
+                            ctx.fillRect(x1, y2, x2 - x1, y1 - y2);
+                            if (borderWidth > 0) {
+                                ctx.strokeStyle = annotation.borderColor || 'black';
+                                ctx.lineWidth = borderWidth;
+                                ctx.strokeRect(x1, y2, x2 - x1, y1 - y2);
+                            }
+                            ctx.restore();
+                        } else if (annotation.type === 'line') {
+                            const { xMin, xMax, yMin, yMax, borderColor, borderWidth, borderDash, label } = annotation;
+                            const x = xScale.getPixelForValue(xMin);
+                            const y1 = yScale.getPixelForValue(yMin === 'max' ? yScale.max : yMin);
+                            const y2 = yScale.getPixelForValue(yMax === 'max' ? yScale.max : yMax);
+
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.strokeStyle = borderColor;
+                            ctx.lineWidth = borderWidth;
+                            if (borderDash) {
+                                ctx.setLineDash(borderDash);
+                            }
+                            ctx.moveTo(x, y1);
+                            ctx.lineTo(x, y2);
+                            ctx.stroke();
+                            ctx.restore();
+
+                            if (label && label.enabled) {
+                                ctx.save();
+                                ctx.fillStyle = label.backgroundColor;
+                                ctx.font = '12px Arial';
+                                ctx.textAlign = 'left';
+                                ctx.textBaseline = 'middle';
+                                const text = label.content;
+                                const textWidth = ctx.measureText(text).width;
+                                const padding = label.padding || 0;
+                                const labelX = annotation.xMin === 200 ? xScale.getPixelForValue(275) : 
+                                              annotation.xMin === 350 ? xScale.getPixelForValue(425) :
+                                              annotation.xMin === 500 ? xScale.getPixelForValue(700) : x;
+                                const labelY = yScale.getPixelForValue(yScale.min) - (label.position === 'bottom' ? 10 : -10);
+                                ctx.fillRect(labelX - padding, labelY - 6 - padding, textWidth + 2 * padding, 12 + 2 * padding);
+                                ctx.fillStyle = label.color;
+                                ctx.fillText(text, labelX, labelY);
+                                ctx.restore();
+                            }
+                        }
+                    });
+                }
+            }
+        };
+
+        Chart.register(ChartAnnotation);
+    </script>
+</body>
+</html>
