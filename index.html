@@ -117,6 +117,22 @@
         #controls-container button:hover {
             background-color: #45a049;
         }
+        .delete-button {
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .delete-button:hover {
+            background-color: #cc0000;
+        }
+        .tag-input {
+            padding: 2px;
+            font-size: 14px;
+            width: 100px;
+        }
     </style>
 </head>
 <body>
@@ -127,6 +143,7 @@
             <option value="inventoryid">Inventory ID</option>
             <option value="pen">Pen Model</option>
             <option value="brand">Brand</option>
+            <option value="tag">Tag</option>
         </select>
         <label for="x-axis-max">X-Axis Max: </label>
         <select id="x-axis-max" onchange="updateChart()">
@@ -137,6 +154,7 @@
         </select>
         <button id="copy-chart">Copy to Clipboard</button>
         <button id="download-chart">Download as PNG</button>
+        <button id="copy-table">Copy Table to Clipboard</button>
     </div>
     <div id="chart-container">
         <canvas id="pressureChart"></canvas>
@@ -154,7 +172,9 @@
                 <th>P25</th>
                 <th>P50</th>
                 <th>P75</th>
+                <th>Tag</th>
                 <th>Date</th>
+                <th>Delete</th>
             </tr>
         </thead>
         <tbody id="pen-table-body"></tbody>
@@ -169,6 +189,7 @@
         const xAxisMaxSelect = document.getElementById('x-axis-max');
         const copyChartButton = document.getElementById('copy-chart');
         const downloadChartButton = document.getElementById('download-chart');
+        const copyTableButton = document.getElementById('copy-table');
         let chart = null;
         const datasets = [];
         const tableData = [];
@@ -176,7 +197,8 @@
         const colorAssignments = {
             inventoryid: {},
             pen: {},
-            brand: {}
+            brand: {},
+            tag: {}
         };
         const visibility = {};
         const highlight = {};
@@ -245,7 +267,8 @@
                                 data: data,
                                 inventoryid: json.inventoryid || 'Unknown',
                                 pen: json.pen || 'Unknown',
-                                brand: json.brand || 'Unknown'
+                                brand: json.brand || 'Unknown',
+                                tag: 'untagged' // Default tag
                             });
                             const physicalPressures = json.records.map(record => record[0]);
                             tableData.push({
@@ -256,6 +279,7 @@
                                 p25: calculatePhysicalPressure(json.records, 25),
                                 p50: calculatePhysicalPressure(json.records, 50),
                                 p75: calculatePhysicalPressure(json.records, 75),
+                                tag: 'untagged', // Default tag
                                 date: json.date || 'Unknown',
                                 brand: json.brand || 'Unknown'
                             });
@@ -302,8 +326,88 @@
             link.click();
         });
 
+        // Copy table to clipboard as HTML
+        copyTableButton.addEventListener('click', () => {
+            if (tableData.length === 0) {
+                alert('No table data available to copy.');
+                return;
+            }
+            // Generate HTML table
+            let html = `
+                <table border="1" style="border-collapse: collapse;">
+                    <thead>
+                        <tr style="background-color: #f2f2f2;">
+                            <th style="padding: 10px;">Pen Model</th>
+                            <th style="padding: 10px;">Inventory Number</th>
+                            <th style="padding: 10px;">Lowest Physical Pressure</th>
+                            <th style="padding: 10px;">Highest Physical Pressure</th>
+                            <th style="padding: 10px;">P25</th>
+                            <th style="padding: 10px;">P50</th>
+                            <th style="padding: 10px;">P75</th>
+                            <th style="padding: 10px;">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            tableData.forEach(row => {
+                html += `
+                    <tr>
+                        <td style="padding: 10px;">${row.penModel}</td>
+                        <td style="padding: 10px;">${row.inventoryNumber}</td>
+                        <td style="padding: 10px;">${row.lowestPressure}</td>
+                        <td style="padding: 10px;">${row.highestPressure}</td>
+                        <td style="padding: 10px;">${row.p25}</td>
+                        <td style="padding: 10px;">${row.p50}</td>
+                        <td style="padding: 10px;">${row.p75}</td>
+                        <td style="padding: 10px;">${row.date}</td>
+                    </tr>
+                `;
+            });
+            html += `
+                    </tbody>
+                </table>
+            `;
+            const blob = new Blob([html], { type: 'text/html' });
+            const item = new ClipboardItem({ 'text/html': blob });
+            navigator.clipboard.write([item]).then(() => {
+                alert('Table copied to clipboard as HTML!');
+            }).catch(err => {
+                alert(`Failed to copy table: ${err.message}`);
+            });
+        });
+
+        // Delete a record
+        function deleteRecord(inventoryId) {
+            // Remove from datasets
+            const datasetIndex = datasets.findIndex(ds => ds.label === inventoryId);
+            if (datasetIndex !== -1) {
+                datasets.splice(datasetIndex, 1);
+            }
+
+            // Remove from tableData
+            const tableDataIndex = tableData.findIndex(row => row.inventoryNumber === inventoryId);
+            if (tableDataIndex !== -1) {
+                tableData.splice(tableDataIndex, 1);
+            }
+
+            // Remove from visibility and highlight
+            delete visibility[inventoryId];
+            delete highlight[inventoryId];
+
+            // Update chart and table
+            assignColors();
+            updateChartAndTable();
+        }
+
         function assignColors() {
             const mode = colorModeSelect.value;
+            // Update datasets with current tags from tableData
+            datasets.forEach(ds => {
+                const tableRow = tableData.find(row => row.inventoryNumber === ds.label);
+                if (tableRow) {
+                    ds.tag = tableRow.tag;
+                }
+            });
             const uniqueValues = [...new Set(datasets.map(ds => ds[mode]))];
             uniqueValues.forEach((value, index) => {
                 colorAssignments[mode][value] = colors[index % colors.length];
@@ -365,21 +469,33 @@
             const uniqueValues = [...new Set(datasets.map(ds => ds[mode]))];
             const legendItems = [];
 
+            // Calculate pen counts for each unique value
+            const penCounts = {};
+            datasets.forEach(ds => {
+                const value = ds[mode];
+                penCounts[value] = (penCounts[value] || 0) + 1;
+            });
+
             if (!allHighlighted && !noneHighlighted) {
                 // Include gray color for non-highlighted pens
-                legendItems.push({
-                    text: 'Non-Highlighted',
-                    fillStyle: '#B0B0B0',
-                    strokeStyle: '#B0B0B0',
-                    hidden: !visibleDatasets.some(ds => !highlight[ds.label])
-                });
+                const nonHighlightedCount = datasets.filter(ds => !highlight[ds.label]).length;
+                if (nonHighlightedCount > 0) {
+                    legendItems.push({
+                        text: nonHighlightedCount > 1 ? `Non-Highlighted (${nonHighlightedCount})` : 'Non-Highlighted',
+                        fillStyle: '#B0B0B0',
+                        strokeStyle: '#B0B0B0',
+                        hidden: !visibleDatasets.some(ds => !highlight[ds.label])
+                    });
+                }
             }
 
             uniqueValues.forEach(value => {
                 const color = colorAssignments[mode][value] || colors[0];
                 const isHidden = !visibleDatasets.some(ds => ds[mode] === value);
+                const count = penCounts[value];
+                const labelText = count > 1 ? `${value} (${count})` : value;
                 legendItems.push({
-                    text: value,
+                    text: labelText,
                     fillStyle: color,
                     strokeStyle: color,
                     hidden: isHidden
@@ -414,7 +530,8 @@
                                         fillStyle: item.fillStyle,
                                         strokeStyle: item.strokeStyle,
                                         hidden: item.hidden,
-                                        datasetIndex: item.text === 'Non-Highlighted' ? -1 : datasets.findIndex(ds => ds[mode] === item.text)
+                                        lineWidth: 2,
+                                        datasetIndex: item.text.startsWith('Non-Highlighted') ? -1 : datasets.findIndex(ds => ds[mode] === item.text.split(' (')[0])
                                     }));
                                 }
                             },
@@ -431,7 +548,7 @@
                                     });
                                 } else {
                                     // Toggle visibility of all datasets with the same mode value
-                                    const value = legendItem.text;
+                                    const value = legendItem.text.split(' (')[0]; // Remove count from text
                                     datasets.forEach(ds => {
                                         if (ds[mode] === value) {
                                             visibility[ds.label] = !visibility[ds.label];
@@ -442,7 +559,10 @@
                                 chart.update();
                             }
                         },
-                        title: { display: true, text: 'Pen Pressure Mapping' },
+                        title: {
+                            display: true,
+                            text: `Pen Pressure Mapping (${visibleDatasets.length} pens)`
+                        },
                         annotation: {
                             annotations: {
                                 box1: {
@@ -558,7 +678,9 @@
                     <td>${row.p25}</td>
                     <td>${row.p50}</td>
                     <td>${row.p75}</td>
+                    <td><input type="text" class="tag-input" data-inventory="${row.inventoryNumber}" value="${row.tag}"></td>
                     <td>${row.date}</td>
+                    <td><button class="delete-button" data-inventory="${row.inventoryNumber}">Delete</button></td>
                 `;
                 tableBody.appendChild(tr);
             });
@@ -577,6 +699,29 @@
                 checkbox.addEventListener('change', (e) => {
                     const inventoryId = e.target.getAttribute('data-inventory');
                     highlight[inventoryId] = e.target.checked;
+                    assignColors();
+                    updateChart();
+                    updateTable();
+                });
+            });
+
+            // Add event listeners to delete buttons
+            document.querySelectorAll('.delete-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const inventoryId = e.target.getAttribute('data-inventory');
+                    deleteRecord(inventoryId);
+                });
+            });
+
+            // Add event listeners to tag inputs
+            document.querySelectorAll('.tag-input').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const inventoryId = e.target.getAttribute('data-inventory');
+                    const newTag = e.target.value || 'untagged';
+                    const tableRow = tableData.find(row => row.inventoryNumber === inventoryId);
+                    if (tableRow) {
+                        tableRow.tag = newTag;
+                    }
                     assignColors();
                     updateChart();
                     updateTable();
