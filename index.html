@@ -10,11 +10,11 @@
 <body>
 <div id="main-container">
     <div id="left-panel">
-        <div id="drop-zone">Drag and drop JSON files here to graph pen pressure data.</div>
+        <div id="drop-zone">Drag JSON data files here.</div>
         <div id="controls-container">
             <label for="color-mode">Series color</label>
             <select id="color-mode" onchange="updateChartAndTable()">
-                <option value="inventoryid">Pen Inventory ID</option>
+                <option value="inventoryid">Pen inventory ID</option>
                 <option value="pen">Pen model</option>
                 <option value="brand">Brand</option>
                 <option value="tag">Tag</option>
@@ -23,15 +23,15 @@
             <label for="x-axis-max">Physical Max:</label>
             <select id="x-axis-max" onchange="updateChart()">
                 <option value="auto">Automatic</option>
-                <option value="250">15</option>
+                <option value="15">15</option>
                 <option value="250">250</option>
                 <option value="500">500</option>
                 <option value="1000" selected>1000</option>
             </select>
 
-            <button id="copy-chart">Copy Chart </button>
-            <button id="copy-table">Copy Table </button>
-            <button id="download-chart">Download Chart PNG</button>
+            <button id="copy-chart">Copy chart </button>
+            <button id="copy-table">Copy table </button>
+            <button id="download-chart">Export chart (PNG)</button>
         </div>
     </div>
     <div id="right-panel">
@@ -47,10 +47,10 @@
         <th>Visible</th>
         <th>Highlight</th>
         <th>Color</th>
-        <th>Pen Model</th>
-        <th>Inventory Number</th>
-        <th>Lowest Physical Pressure</th>
-        <th>Highest Physical Pressure</th>
+        <th>Pen model</th>
+        <th>Inventory <br/> Number</th>
+        <th>Lowest <br/>Physical </th>
+        <th>Highest <br/>Physical </th>
         <th>P25</th>
         <th>P50</th>
         <th>P75</th>
@@ -76,7 +76,16 @@
         let chart = null;
         const datasets = [];
         const tableData = [];
-        const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#7BCF7B', '#FF5555', '#55AAFF'];
+        const colors = ['#FF6384',
+            '#36A2EB',
+            '#FFCE56',
+            '#4BC0C0',
+            '#9966FF',
+            '#FF9F40',
+            '#C9CBCF',
+            '#7BCF7B',
+            '#FF5555',
+            '#55AAFF'];
         const colorAssignments = {
             inventoryid: {},
             pen: {},
