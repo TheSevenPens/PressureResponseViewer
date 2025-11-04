@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -332,220 +331,223 @@
             });
         }
 
-        function updateChart() {
-            if (chart) {
-                chart.destroy();
-            }
-            const xAxisMax = xAxisMaxSelect.value;
-            const xScaleOptions = xAxisMax === 'auto' ? {} : {
-                max: parseInt(xAxisMax),
-                beginAtZero: true
-            };
-            const visibleDatasets = datasets.filter(ds => visibility[ds.label]);
-            // Sort datasets to render highlighted pens last (on top)
-            visibleDatasets.sort((a, b) => (highlight[b.label] || false) - (highlight[a.label] || false));
-
-            // Determine unique color groups for the legend
-            const mode = colorModeSelect.value;
-            const highlightStates = Object.values(highlight);
-            const allHighlighted = highlightStates.length > 0 && highlightStates.every(state => state);
-            const noneHighlighted = highlightStates.length > 0 && highlightStates.every(state => !state);
-            const uniqueValues = [...new Set(datasets.map(ds => ds[mode]))];
-            const legendItems = [];
-
-            // Calculate pen counts for each unique value
-            const penCounts = {};
-            datasets.forEach(ds => {
-                const value = ds[mode];
-                penCounts[value] = (penCounts[value] || 0) + 1;
-            });
-
-            if (!allHighlighted && !noneHighlighted) {
-                // Include gray color for non-highlighted pens
-                const nonHighlightedCount = datasets.filter(ds => !highlight[ds.label]).length;
-                if (nonHighlightedCount > 0) {
-                    legendItems.push({
-                        text: nonHighlightedCount > 1 ? `Non-Highlighted (${nonHighlightedCount})` : 'Non-Highlighted',
-                        fillStyle: '#B0B0B0',
-                        strokeStyle: '#B0B0B0',
-                        hidden: !visibleDatasets.some(ds => !highlight[ds.label])
-                    });
+            function updateChart() {
+                if (chart) {
+                    chart.destroy();
                 }
-            }
+                const xAxisMax = xAxisMaxSelect.value;
+                const xScaleOptions = xAxisMax === 'auto' ? {} : {
+                    max: parseInt(xAxisMax),
+                    beginAtZero: true
+                };
+                const visibleDatasets = datasets.filter(ds => visibility[ds.label]);
+                // Sort datasets to render highlighted pens last (on top)
+                visibleDatasets.sort((a, b) => (highlight[b.label] || false) - (highlight[a.label] || false));
 
-            uniqueValues.forEach(value => {
-                const color = colorAssignments[mode][value] || colors[0];
-                const isHidden = !visibleDatasets.some(ds => ds[mode] === value);
-                const count = penCounts[value];
-                const labelText = count > 1 ? `${value} (${count})` : value;
-                legendItems.push({
-                    text: labelText,
-                    fillStyle: color,
-                    strokeStyle: color,
-                    hidden: isHidden
+                // Determine unique color groups for the legend
+                const mode = colorModeSelect.value;
+                const highlightStates = Object.values(highlight);
+                const allHighlighted = highlightStates.length > 0 && highlightStates.every(state => state);
+                const noneHighlighted = highlightStates.length > 0 && highlightStates.every(state => !state);
+                const uniqueValues = [...new Set(datasets.map(ds => ds[mode]))];
+                const legendItems = [];
+
+                // Calculate pen counts for each unique value
+                const penCounts = {};
+                datasets.forEach(ds => {
+                    const value = ds[mode];
+                    penCounts[value] = (penCounts[value] || 0) + 1;
                 });
-            });
 
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: { datasets: visibleDatasets },
-                options: {
-                    responsive: true,
-                    animation: false, // Disable animations
-                    scales: {
-                        x: {
-                            type: 'linear',
-                            position: 'bottom',
-                            title: { display: true, text: 'Physical Pressure' },
-                            ...xScaleOptions
+                if (!allHighlighted && !noneHighlighted) {
+                    // Include gray color for non-highlighted pens
+                    const nonHighlightedCount = datasets.filter(ds => !highlight[ds.label]).length;
+                    if (nonHighlightedCount > 0) {
+                        legendItems.push({
+                            text: nonHighlightedCount > 1 ? `Non-Highlighted (${nonHighlightedCount})` : 'Non-Highlighted',
+                            fillStyle: '#B0B0B0',
+                            strokeStyle: '#B0B0B0',
+                            hidden: !visibleDatasets.some(ds => !highlight[ds.label])
+                        });
+                    }
+                }
+
+                uniqueValues.forEach(value => {
+                    const color = colorAssignments[mode][value] || colors[0];
+                    const isHidden = !visibleDatasets.some(ds => ds[mode] === value);
+                    const count = penCounts[value];
+                    const labelText = count > 1 ? `${value} (${count})` : value;
+                    legendItems.push({
+                        text: labelText,
+                        fillStyle: color,
+                        strokeStyle: color,
+                        hidden: isHidden
+                    });
+                });
+
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: { datasets: visibleDatasets },
+                    options: {
+                        responsive: true,
+                        animation: false, // Disable animations
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                title: { display: true, text: 'Physical Pressure' },
+                                ...xScaleOptions
+                            },
+                            y: {
+                                type: 'linear',
+                                title: { display: true, text: 'Logical Pressure' }
+                            }
                         },
-                        y: {
-                            type: 'linear',
-                            title: { display: true, text: 'Logical Pressure' }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            labels: {
-                                generateLabels: function(chart) {
-                                    return legendItems.map(item => ({
-                                        text: item.text,
-                                        fillStyle: item.fillStyle,
-                                        strokeStyle: item.strokeStyle,
-                                        hidden: item.hidden,
-                                        lineWidth: 2,
-                                        datasetIndex: item.text.startsWith('Non-Highlighted') ? -1 : datasets.findIndex(ds => ds[mode] === item.text.split(' (')[0])
-                                    }));
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    generateLabels: function(chart) {
+                                        return legendItems.map(item => ({
+                                            text: item.text,
+                                            fillStyle: item.fillStyle,
+                                            strokeStyle: item.strokeStyle,
+                                            hidden: item.hidden,
+                                            lineWidth: 2,
+                                            datasetIndex: item.text.startsWith('Non-Highlighted') ? -1 : datasets.findIndex(ds => ds[mode] === item.text.split(' (')[0])
+                                        }));
+                                    }
+                                },
+                                onClick: function(e, legendItem, legend) {
+                                    const index = legendItem.datasetIndex;
+                                    const chart = legend.chart;
+
+                                    if (index === -1) {
+                                        // Toggle visibility of all non-highlighted datasets
+                                        datasets.forEach(ds => {
+                                            if (!highlight[ds.label]) {
+                                                visibility[ds.label] = !visibility[ds.label];
+                                            }
+                                        });
+                                    } else {
+                                        // Toggle visibility of all datasets with the same mode value
+                                        const value = legendItem.text.split(' (')[0]; // Remove count from text
+                                        datasets.forEach(ds => {
+                                            if (ds[mode] === value) {
+                                                visibility[ds.label] = !visibility[ds.label];
+                                            }
+                                        });
+                                    }
+
+                                    chart.update();
                                 }
                             },
-                            onClick: function(e, legendItem, legend) {
-                                const index = legendItem.datasetIndex;
-                                const chart = legend.chart;
-
-                                if (index === -1) {
-                                    // Toggle visibility of all non-highlighted datasets
-                                    datasets.forEach(ds => {
-                                        if (!highlight[ds.label]) {
-                                            visibility[ds.label] = !visibility[ds.label];
+                            title: {
+                                display: true,
+                                text: `Pressure response curve (${visibleDatasets.length} pens)`
+                            },
+                            annotation: {
+                                annotations: {
+                                    box1: {
+                                        type: 'box',
+                                        xMin: 200,
+                                        xMax: 350,
+                                        yMin: 0,
+                                        yMax: 'max',
+                                        backgroundColor: 'rgba(200, 200, 200, 0.2)',
+                                        borderWidth: 0
+                                    },
+                                    box2: {
+                                        type: 'box',
+                                        xMin: 500,
+                                        xMax: 900,
+                                        yMin: 0,
+                                        yMax: 'max',
+                                        backgroundColor: 'rgba(200, 200, 200, 0.2)',
+                                        borderWidth: 0
+                                    },
+                                    line1: {
+                                        type: 'line',
+                                        xMin: 200,
+                                        xMax: 200,
+                                        yMin: 0,
+                                        yMax: 'max',
+                                        borderColor: '#000000',
+                                        borderWidth: 2,
+                                        borderDash: [5, 5],
+                                        label: {
+                                            content: 'OK',
+                                            enabled: true,
+                                            position: 'bottom',
+                                            backgroundColor: 'rgba(0,0,0,0.8)',
+                                            color: '#ffffff',
+                                            padding: 4
                                         }
-                                    });
-                                } else {
-                                    // Toggle visibility of all datasets with the same mode value
-                                    const value = legendItem.text.split(' (')[0]; // Remove count from text
-                                    datasets.forEach(ds => {
-                                        if (ds[mode] === value) {
-                                            visibility[ds.label] = !visibility[ds.label];
+                                    },
+                                    line2: {
+                                        type: 'line',
+                                        xMin: 350,
+                                        xMax: 350,
+                                        yMin: 0,
+                                        yMax: 'max',
+                                        borderColor: '#000000',
+                                        borderWidth: 2,
+                                        borderDash: [5, 5],
+                                        label: {
+                                            content: 'GOOD',
+                                            enabled: true,
+                                            position: 'bottom',
+                                            backgroundColor: 'rgba(0,0,0,0.8)',
+                                            color: '#ffffff',
+                                            padding: 4
                                         }
-                                    });
-                                }
-
-                                chart.update();
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: `Pressure response curve (${visibleDatasets.length} pens)`
-                        },
-                        annotation: {
-                            annotations: {
-                                box1: {
-                                    type: 'box',
-                                    xMin: 200,
-                                    xMax: 350,
-                                    yMin: 0,
-                                    yMax: 'max',
-                                    backgroundColor: 'rgba(200, 200, 200, 0.2)',
-                                    borderWidth: 0
-                                },
-                                box2: {
-                                    type: 'box',
-                                    xMin: 500,
-                                    xMax: 900,
-                                    yMin: 0,
-                                    yMax: 'max',
-                                    backgroundColor: 'rgba(200, 200, 200, 0.2)',
-                                    borderWidth: 0
-                                },
-                                line1: {
-                                    type: 'line',
-                                    xMin: 200,
-                                    xMax: 200,
-                                    yMin: 0,
-                                    yMax: 'max',
-                                    borderColor: '#000000',
-                                    borderWidth: 2,
-                                    borderDash: [5, 5],
-                                    label: {
-                                        content: 'OK',
-                                        enabled: true,
-                                        position: 'bottom',
-                                        backgroundColor: 'rgba(0,0,0,0.8)',
-                                        color: '#ffffff',
-                                        padding: 4
-                                    }
-                                },
-                                line2: {
-                                    type: 'line',
-                                    xMin: 350,
-                                    xMax: 350,
-                                    yMin: 0,
-                                    yMax: 'max',
-                                    borderColor: '#000000',
-                                    borderWidth: 2,
-                                    borderDash: [5, 5],
-                                    label: {
-                                        content: 'GOOD',
-                                        enabled: true,
-                                        position: 'bottom',
-                                        backgroundColor: 'rgba(0,0,0,0.8)',
-                                        color: '#ffffff',
-                                        padding: 4
-                                    }
-                                },
-                                line3: {
-                                    type: 'line',
-                                    xMin: 500,
-                                    xMax: 500,
-                                    yMin: 0,
-                                    yMax: 'max',
-                                    borderColor: '#000000',
-                                    borderWidth: 2,
-                                    borderDash: [5, 5],
-                                    label: {
-                                        content: 'EXCELLENT',
-                                        enabled: true,
-                                        position: 'bottom',
-                                        backgroundColor: 'rgba(0,0,0,0.8)',
-                                        color: '#ffffff',
-                                        padding: 4
-                                    }
-                                },
-                                line4: {
-                                    type: 'line',
-                                    xMin: 900,
-                                    xMax: 900,
-                                    yMin: 0,
-                                    yMax: 'max',
-                                    borderColor: '#000000',
-                                    borderWidth: 2,
-                                    borderDash: [5, 5],
-                                    label: {
-                                        content: 'EXCESSIVE',
-                                        enabled: true,
-                                        position: 'bottom',
-                                        backgroundColor: 'rgba(0,0,0,0.8)',
-                                        color: '#ffffff',
-                                        padding: 4
+                                    },
+                                    line3: {
+                                        type: 'line',
+                                        xMin: 500,
+                                        xMax: 500,
+                                        yMin: 0,
+                                        yMax: 'max',
+                                        borderColor: '#000000',
+                                        borderWidth: 2,
+                                        borderDash: [5, 5],
+                                        label: {
+                                            content: 'EXCELLENT',
+                                            enabled: true,
+                                            position: 'bottom',
+                                            backgroundColor: 'rgba(0,0,0,0.8)',
+                                            color: '#ffffff',
+                                            padding: 4
+                                        }
+                                    },
+                                    line4: {
+                                        type: 'line',
+                                        xMin: 900,
+                                        xMax: 900,
+                                        yMin: 0,
+                                        yMax: 'max',
+                                        borderColor: '#000000',
+                                        borderWidth: 2,
+                                        borderDash: [5, 5],
+                                        label: {
+                                            content: 'EXCESSIVE',
+                                            enabled: true,
+                                            position: 'bottom',
+                                            backgroundColor: 'rgba(0,0,0,0.8)',
+                                            color: '#ffffff',
+                                            padding: 4
+                                        }
                                     }
                                 }
                             }
+                        },
+                        layout: {
+                            backgroundColor: 'white'
                         }
-                    }
-                },
-                plugins: [ChartAnnotation]
-            });
-        }
+                    },
+                    plugins: [ChartAnnotation, ChartBackgroundPlugin]
+                });
+            }
 
         function updateTable() {
             tableBody.innerHTML = '';
@@ -619,75 +621,88 @@
             updateTable();
         }
 
-        // Register Chart.js annotation plugin
-        const ChartAnnotation = {
-            id: 'annotation',
-            beforeDraw: function(chart) {
-                if (chart.config.options.plugins.annotation && chart.config.options.plugins.annotation.annotations) {
-                    const ctx = chart.ctx;
-                    Object.values(chart.config.options.plugins.annotation.annotations).forEach(annotation => {
-                        const xScale = chart.scales.x;
-                        const yScale = chart.scales.y;
+            // Register Chart.js annotation plugin
+            const ChartAnnotation = {
+                id: 'annotation',
+                beforeDraw: function(chart) {
+                    if (chart.config.options.plugins.annotation && chart.config.options.plugins.annotation.annotations) {
+                        const ctx = chart.ctx;
+                        Object.values(chart.config.options.plugins.annotation.annotations).forEach(annotation => {
+                            const xScale = chart.scales.x;
+                            const yScale = chart.scales.y;
 
-                        if (annotation.type === 'box') {
-                            const { xMin, xMax, yMin, yMax, backgroundColor, borderWidth } = annotation;
-                            const x1 = xScale.getPixelForValue(xMin);
-                            const x2 = xScale.getPixelForValue(xMax);
-                            const y1 = yScale.getPixelForValue(yMin === 'max' ? yScale.max : yMin);
-                            const y2 = yScale.getPixelForValue(yMax === 'max' ? yScale.max : yMax);
+                            if (annotation.type === 'box') {
+                                const { xMin, xMax, yMin, yMax, backgroundColor, borderWidth } = annotation;
+                                const x1 = xScale.getPixelForValue(xMin);
+                                const x2 = xScale.getPixelForValue(xMax);
+                                const y1 = yScale.getPixelForValue(yMin === 'max' ? yScale.max : yMin);
+                                const y2 = yScale.getPixelForValue(yMax === 'max' ? yScale.max : yMax);
 
-                            ctx.save();
-                            ctx.fillStyle = backgroundColor;
-                            ctx.fillRect(x1, y2, x2 - x1, y1 - y2);
-                            if (borderWidth > 0) {
-                                ctx.strokeStyle = annotation.borderColor || 'black';
-                                ctx.lineWidth = borderWidth;
-                                ctx.strokeRect(x1, y2, x2 - x1, y1 - y2);
-                            }
-                            ctx.restore();
-                        } else if (annotation.type === 'line') {
-                            const { xMin, xMax, yMin, yMax, borderColor, borderWidth, borderDash, label } = annotation;
-                            const x = xScale.getPixelForValue(xMin);
-                            const y1 = yScale.getPixelForValue(yMin === 'max' ? yScale.max : yMin);
-                            const y2 = yScale.getPixelForValue(yMax === 'max' ? yScale.max : yMax);
-
-                            ctx.save();
-                            ctx.beginPath();
-                            ctx.strokeStyle = borderColor;
-                            ctx.lineWidth = borderWidth;
-                            if (borderDash) {
-                                ctx.setLineDash(borderDash);
-                            }
-                            ctx.moveTo(x, y1);
-                            ctx.lineTo(x, y2);
-                            ctx.stroke();
-                            ctx.restore();
-
-                            if (label && label.enabled) {
                                 ctx.save();
-                                ctx.fillStyle = label.backgroundColor;
-                                ctx.font = '12px Arial';
-                                ctx.textAlign = 'left';
-                                ctx.textBaseline = 'middle';
-                                const text = label.content;
-                                const textWidth = ctx.measureText(text).width;
-                                const padding = label.padding || 0;
-                                const labelX = annotation.xMin === 200 ? xScale.getPixelForValue(275) : 
-                                              annotation.xMin === 350 ? xScale.getPixelForValue(425) :
-                                              annotation.xMin === 500 ? xScale.getPixelForValue(700) : x;
-                                const labelY = yScale.getPixelForValue(yScale.min) - (label.position === 'bottom' ? 10 : -10);
-                                ctx.fillRect(labelX - padding, labelY - 6 - padding, textWidth + 2 * padding, 12 + 2 * padding);
-                                ctx.fillStyle = label.color;
-                                ctx.fillText(text, labelX, labelY);
+                                ctx.fillStyle = backgroundColor;
+                                ctx.fillRect(x1, y2, x2 - x1, y1 - y2);
+                                if (borderWidth > 0) {
+                                    ctx.strokeStyle = annotation.borderColor || 'black';
+                                    ctx.lineWidth = borderWidth;
+                                    ctx.strokeRect(x1, y2, x2 - x1, y1 - y2);
+                                }
                                 ctx.restore();
-                            }
-                        }
-                    });
-                }
-            }
-        };
+                            } else if (annotation.type === 'line') {
+                                const { xMin, xMax, yMin, yMax, borderColor, borderWidth, borderDash, label } = annotation;
+                                const x = xScale.getPixelForValue(xMin);
+                                const y1 = yScale.getPixelForValue(yMin === 'max' ? yScale.max : yMin);
+                                const y2 = yScale.getPixelForValue(yMax === 'max' ? yScale.max : yMax);
 
-        Chart.register(ChartAnnotation);
+                                ctx.save();
+                                ctx.beginPath();
+                                ctx.strokeStyle = borderColor;
+                                ctx.lineWidth = borderWidth;
+                                if (borderDash) {
+                                    ctx.setLineDash(borderDash);
+                                }
+                                ctx.moveTo(x, y1);
+                                ctx.lineTo(x, y2);
+                                ctx.stroke();
+                                ctx.restore();
+
+                                if (label && label.enabled) {
+                                    ctx.save();
+                                    ctx.fillStyle = label.backgroundColor;
+                                    ctx.font = '12px Arial';
+                                    ctx.textAlign = 'left';
+                                    ctx.textBaseline = 'middle';
+                                    const text = label.content;
+                                    const textWidth = ctx.measureText(text).width;
+                                    const padding = label.padding || 0;
+                                    const labelX = annotation.xMin === 200 ? xScale.getPixelForValue(275) : 
+                                                  annotation.xMin === 350 ? xScale.getPixelForValue(425) :
+                                                  annotation.xMin === 500 ? xScale.getPixelForValue(700) : x;
+                                    const labelY = yScale.getPixelForValue(yScale.min) - (label.position === 'bottom' ? 10 : -10);
+                                    ctx.fillRect(labelX - padding, labelY - 6 - padding, textWidth + 2 * padding, 12 + 2 * padding);
+                                    ctx.fillStyle = label.color;
+                                    ctx.fillText(text, labelX, labelY);
+                                    ctx.restore();
+                                }
+                            }
+                        });
+                    }
+                }
+            };
+
+            // Add background color plugin
+            const ChartBackgroundPlugin = {
+                id: 'customCanvasBackgroundColor',
+                beforeDraw: (chart, args, options) => {
+                    const {ctx} = chart;
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'destination-over';
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, chart.width, chart.height);
+                    ctx.restore();
+                }
+            };
+
+            Chart.register(ChartAnnotation, ChartBackgroundPlugin);
     </script>
 </body>
 </html>
