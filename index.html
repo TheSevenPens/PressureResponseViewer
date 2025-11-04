@@ -13,25 +13,26 @@
     <div id="left-panel">
         <div id="drop-zone">Drag and drop JSON files here to graph pen pressure data.</div>
         <div id="controls-container">
-            <label for="color-mode">Color by:</label>
+            <label for="color-mode">Series color</label>
             <select id="color-mode" onchange="updateChartAndTable()">
-                <option value="inventoryid">Inventory ID</option>
-                <option value="pen">Pen Model</option>
+                <option value="inventoryid">Pen Inventory ID</option>
+                <option value="pen">Pen model</option>
                 <option value="brand">Brand</option>
                 <option value="tag">Tag</option>
             </select>
 
-            <label for="x-axis-max">X-Axis Max:</label>
+            <label for="x-axis-max">Physical Max:</label>
             <select id="x-axis-max" onchange="updateChart()">
                 <option value="auto">Automatic</option>
+                <option value="250">15</option>
                 <option value="250">250</option>
                 <option value="500">500</option>
                 <option value="1000" selected>1000</option>
             </select>
 
-            <button id="copy-chart">Copy to Clipboard</button>
-            <button id="download-chart">Download as PNG</button>
-            <button id="copy-table">Copy Table to Clipboard</button>
+            <button id="copy-chart">Copy Chart </button>
+            <button id="copy-table">Copy Table </button>
+            <button id="download-chart">Download Chart PNG</button>
         </div>
     </div>
     <div id="right-panel">
@@ -444,7 +445,7 @@
                         },
                         title: {
                             display: true,
-                            text: `Pen Pressure Mapping (${visibleDatasets.length} pens)`
+                            text: `Pressure response curve (${visibleDatasets.length} pens)`
                         },
                         annotation: {
                             annotations: {
