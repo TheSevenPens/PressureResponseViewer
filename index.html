@@ -51,9 +51,11 @@
         <th>Inventory <br/> Number</th>
         <th>Lowest <br/>Physical </th>
         <th>Highest <br/>Physical </th>
+        <th>P0.01</th>
         <th>P25</th>
         <th>P50</th>
         <th>P75</th>
+        <th>P100</th>
         <th>Tag</th>
         <th>Date</th>
         <th>Delete</th>
@@ -122,6 +124,63 @@
             return x.toFixed(1);
         }
 
+        // Function to calculate physical pressure by extrapolating from the first two data points
+        function calculatePhysicalPressureExtrapolated(records, targetLogicalPressure) {
+            // Sort records by logical pressure (y) to ensure correct order
+            const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
+            
+            // Need at least 2 points to extrapolate
+            if (sortedRecords.length < 2) {
+                return 'N/A';
+            }
+
+            // Get the first two points (lowest logical pressures)
+            const point1 = sortedRecords[0]; // [physical, logical]
+            const point2 = sortedRecords[1]; // [physical, logical]
+
+            const x1 = point1[0], y1 = point1[1];
+            const x2 = point2[0], y2 = point2[1];
+
+            // Check if points have different logical pressures (avoid division by zero)
+            if (y2 === y1) {
+                return 'N/A';
+            }
+
+            // Linear extrapolation: x = x1 + (x2 - x1) * (target - y1) / (y2 - y1)
+            // This formula works for both interpolation and extrapolation
+            const x = x1 + (x2 - x1) * (targetLogicalPressure - y1) / (y2 - y1);
+            return x.toFixed(1);
+        }
+
+        // Function to calculate physical pressure by extrapolating from the last two data points
+        function calculatePhysicalPressureExtrapolatedFromEnd(records, targetLogicalPressure) {
+            // Sort records by logical pressure (y) to ensure correct order
+            const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
+            
+            // Need at least 2 points to extrapolate
+            if (sortedRecords.length < 2) {
+                return 'N/A';
+            }
+
+            // Get the last two points (highest logical pressures)
+            const n = sortedRecords.length;
+            const point1 = sortedRecords[n - 2]; // [physical, logical]
+            const point2 = sortedRecords[n - 1]; // [physical, logical]
+
+            const x1 = point1[0], y1 = point1[1];
+            const x2 = point2[0], y2 = point2[1];
+
+            // Check if points have different logical pressures (avoid division by zero)
+            if (y2 === y1) {
+                return 'N/A';
+            }
+
+            // Linear extrapolation: x = x1 + (x2 - x1) * (target - y1) / (y2 - y1)
+            // This formula works for both interpolation and extrapolation
+            const x = x1 + (x2 - x1) * (targetLogicalPressure - y1) / (y2 - y1);
+            return x.toFixed(1);
+        }
+
         // Prevent default drag behaviors
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             document.body.addEventListener(eventName, preventDefaults, false);
@@ -168,9 +227,11 @@
                                 inventoryNumber: json.inventoryid || 'Unknown',
                                 lowestPressure: Math.min(...physicalPressures).toFixed(1),
                                 highestPressure: Math.max(...physicalPressures).toFixed(1),
+                                p001: calculatePhysicalPressureExtrapolated(json.records, 0.01),
                                 p25: calculatePhysicalPressure(json.records, 25),
                                 p50: calculatePhysicalPressure(json.records, 50),
                                 p75: calculatePhysicalPressure(json.records, 75),
+                                p100: calculatePhysicalPressureExtrapolatedFromEnd(json.records, 100),
                                 tag: 'untagged', // Default tag
                                 date: json.date || 'Unknown',
                                 brand: json.brand || 'Unknown'
@@ -561,18 +622,24 @@
         function updateTable() {
             tableBody.innerHTML = '';
             tableData.forEach(row => {
+                // Find the corresponding dataset to get its label for visibility tracking
+                const dataset = datasets.find(ds => ds.inventoryid === row.inventoryNumber || ds.label === row.inventoryNumber);
+                const visibilityKey = dataset ? dataset.label : row.inventoryNumber;
+                const isVisible = visibility[visibilityKey] !== undefined ? visibility[visibilityKey] : true;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td><input type="checkbox" class="visibility-checkbox" data-inventory="${row.inventoryNumber}" ${visibility[row.inventoryNumber] ? 'checked' : ''}></td>
+                    <td><input type="checkbox" class="visibility-checkbox" data-inventory="${row.inventoryNumber}" ${isVisible ? 'checked' : ''}></td>
                     <td><input type="checkbox" class="highlight-checkbox" data-inventory="${row.inventoryNumber}" ${highlight[row.inventoryNumber] ? 'checked' : ''}></td>
                     <td><span class="color-box" style="background-color: ${row.color};"></span></td>
                     <td>${row.penModel}</td>
                     <td>${row.inventoryNumber}</td>
                     <td>${row.lowestPressure}</td>
                     <td>${row.highestPressure}</td>
+                    <td>${row.p001}</td>
                     <td>${row.p25}</td>
                     <td>${row.p50}</td>
                     <td>${row.p75}</td>
+                    <td>${row.p100}</td>
                     <td><input type="text" class="tag-input" data-inventory="${row.inventoryNumber}" value="${row.tag}"></td>
                     <td>${row.date}</td>
                     <td><button class="delete-button" data-inventory="${row.inventoryNumber}">Delete</button></td>
@@ -584,7 +651,15 @@
             document.querySelectorAll('.visibility-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', (e) => {
                     const inventoryId = e.target.getAttribute('data-inventory');
-                    visibility[inventoryId] = e.target.checked;
+                    // Find the corresponding dataset to get its label (which is used for filtering)
+                    const dataset = datasets.find(ds => ds.inventoryid === inventoryId || ds.label === inventoryId);
+                    if (dataset) {
+                        // Use the dataset's label as the key for visibility
+                        visibility[dataset.label] = e.target.checked;
+                    } else {
+                        // Fallback to using inventoryId directly
+                        visibility[inventoryId] = e.target.checked;
+                    }
                     updateChart();
                 });
             });
