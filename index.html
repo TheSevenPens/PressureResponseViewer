@@ -98,7 +98,7 @@
         const highlight = {};
 
         // Function to calculate physical pressure for a given logical pressure using linear interpolation
-        function calculatePhysicalPressure(records, targetLogicalPressure) {
+        function calcPhysPressureInternal(records, targetLogicalPressure) {
             // Sort records by logical pressure (y) to ensure correct order
             const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
             let lower = null;
@@ -125,12 +125,13 @@
         }
 
         // Function to calculate physical pressure by extrapolating from the first two data points
-        function calculatePhysicalPressureExtrapolatedToMin(records, targetLogicalPressure) {
+        function calcPhysPressureMin(records, targetLogicalPressure) {
             // Sort records by logical pressure (y) to ensure correct order
             const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
             
             // Need at least 2 points to extrapolate
-            if (sortedRecords.length < 2) {
+            if (sortedRecords.length < 2)
+            {
                 return 'N/A';
             }
 
@@ -153,7 +154,7 @@
         }
 
         // Function to calculate physical pressure by extrapolating from the last two data points
-        function calculatePhysicalPressureExtrapolatedToMax(records, targetLogicalPressure) {
+        function calcPhysPressureMax(records, targetLogicalPressure) {
             // Sort records by logical pressure (y) to ensure correct order
             const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
             
@@ -227,11 +228,11 @@
                                 inventoryNumber: json.inventoryid || 'Unknown',
                                 lowestPressure: Math.min(...physicalPressures).toFixed(1),
                                 highestPressure: Math.max(...physicalPressures).toFixed(1),
-                                p001: calculatePhysicalPressureExtrapolatedToMin(json.records, 0.01),
-                                p25: calculatePhysicalPressure(json.records, 25),
-                                p50: calculatePhysicalPressure(json.records, 50),
-                                p75: calculatePhysicalPressure(json.records, 75),
-                                p100: calculatePhysicalPressureExtrapolatedToMax(json.records, 100),
+                                p001: calcPhysPressureMin(json.records, 0.01),
+                                p25: calcPhysPressureInternal(json.records, 25),
+                                p50: calcPhysPressureInternal(json.records, 50),
+                                p75: calcPhysPressureInternal(json.records, 75),
+                                p100: calcPhysPressureMax(json.records, 100),
                                 tag: 'untagged', // Default tag
                                 date: json.date || 'Unknown',
                                 brand: json.brand || 'Unknown'
