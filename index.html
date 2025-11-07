@@ -125,7 +125,7 @@
         }
 
         // Function to calculate physical pressure by extrapolating from the first two data points
-        function calculatePhysicalPressureExtrapolated(records, targetLogicalPressure) {
+        function calculatePhysicalPressureExtrapolatedToMin(records, targetLogicalPressure) {
             // Sort records by logical pressure (y) to ensure correct order
             const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
             
@@ -153,7 +153,7 @@
         }
 
         // Function to calculate physical pressure by extrapolating from the last two data points
-        function calculatePhysicalPressureExtrapolatedFromEnd(records, targetLogicalPressure) {
+        function calculatePhysicalPressureExtrapolatedToMax(records, targetLogicalPressure) {
             // Sort records by logical pressure (y) to ensure correct order
             const sortedRecords = records.slice().sort((a, b) => a[1] - b[1]);
             
@@ -227,11 +227,11 @@
                                 inventoryNumber: json.inventoryid || 'Unknown',
                                 lowestPressure: Math.min(...physicalPressures).toFixed(1),
                                 highestPressure: Math.max(...physicalPressures).toFixed(1),
-                                p001: calculatePhysicalPressureExtrapolated(json.records, 0.01),
+                                p001: calculatePhysicalPressureExtrapolatedToMin(json.records, 0.01),
                                 p25: calculatePhysicalPressure(json.records, 25),
                                 p50: calculatePhysicalPressure(json.records, 50),
                                 p75: calculatePhysicalPressure(json.records, 75),
-                                p100: calculatePhysicalPressureExtrapolatedFromEnd(json.records, 100),
+                                p100: calculatePhysicalPressureExtrapolatedToMax(json.records, 100),
                                 tag: 'untagged', // Default tag
                                 date: json.date || 'Unknown',
                                 brand: json.brand || 'Unknown'
