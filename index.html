@@ -135,6 +135,8 @@
                 return 'N/A';
             }
 
+
+
             // Get the first two points (lowest logical pressures)
             const point1 = sortedRecords[0]; // [physical, logical]
             const point2 = sortedRecords[1]; // [physical, logical]
@@ -149,8 +151,10 @@
 
             // Linear extrapolation: x = x1 + (x2 - x1) * (target - y1) / (y2 - y1)
             // This formula works for both interpolation and extrapolation
-            const x = x1 + (x2 - x1) * (targetLogicalPressure - y1) / (y2 - y1);
-            return x.toFixed(1);
+            const ydif = y2-y1;
+            const xdif = x2-x1;
+            const x = x1 + (( xdif * (targetLogicalPressure - y1)) / ydif) ;
+            return x.toFixed(2);
         }
 
         // Function to calculate physical pressure by extrapolating from the last two data points
@@ -228,7 +232,7 @@
                                 inventoryNumber: json.inventoryid || 'Unknown',
                                 lowestPressure: Math.min(...physicalPressures).toFixed(1),
                                 highestPressure: Math.max(...physicalPressures).toFixed(1),
-                                p001: calcPhysPressureMin(json.records, 0.01),
+                                p001: calcPhysPressureMin(json.records, 0.0001),
                                 p25: calcPhysPressureInternal(json.records, 25),
                                 p50: calcPhysPressureInternal(json.records, 50),
                                 p75: calcPhysPressureInternal(json.records, 75),
